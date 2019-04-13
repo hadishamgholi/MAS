@@ -10,9 +10,9 @@ golds-own [is-taken]
 bases-own []
 holes-own []
 
-to test
+to-report test
   let num (3 / 2)
-  print num
+  report num
 end
 
 to setup
@@ -28,7 +28,8 @@ to setup
 end
 
 to go
-  ask miners [miner-behavior]
+  miner-behavior
+  update-beliefs
   tick
 end
 
@@ -44,7 +45,6 @@ end
 to setup-world
   let w_s (int (world_size / 2) - 1)
   resize-world (-1 * w_s) (w_s) (-1 * w_s) (w_s)
-  ;print word "w_s is " w_s
 end
 
 to setup-golds
@@ -53,6 +53,7 @@ to setup-golds
     set color yellow
     set size 0.5
     setxy (random-pxcor) (random-pycor)
+    set is-taken false
   ]
 end
 
@@ -64,7 +65,7 @@ to setup-miner
     setxy 0 0
     set beliefs []
     add-belief create-belief "base-loc" [0 0]
-    ;add-belief create-belief "golds-loc" []
+    ;add-belief create-belief "gold-loc" []
 
     set intentions []
     set has-gold false
@@ -83,16 +84,24 @@ to miner-behavior
   ask miners [
     if empty? intentions[
       let dest []
-      ifelse (exist-beliefs-of-type "golds-loc")
-        [set dest (get-belief "golds-loc")]
-        [set dest (list (random-pxcor) (random-pycor))]
+      let gold-id (is-gold-here (list xcor ycor))
+      ifelse gold-id != -1
+        [
+          add-intention (word "reach-gold-to-base " gold-id) (word "is-reached-to " (item 1 read-first-belief-of-type "base-loc"))
+        ]
+        [
+          ifelse (exist-beliefs-of-type "gold-loc")
+            [set dest (item 1 (get-belief "gold-loc"))]
+            [set dest (list (random-pxcor) (random-pycor))]
+            add-intention (word "go-to " dest) (word "is-reached-to " dest)
+        ]
 
-      add-intention (word "go-to " dest) (word "is-reached-to " dest)
 
     ]
+    print get-intention
+    execute-intentions
   ]
-  print get-intention
-  execute-intentions
+
 end
 
 to go-to [dloc]
@@ -118,10 +127,58 @@ to-report is-reached-to [dloc]
     set xdif (xcor - (first dloc))
     set ydif (ycor - (item 1 dloc))
   ]
-  print (word "xdif " xdif " ydif " ydif)
+  ;print (word "xdif " xdif " ydif " ydif)
   ifelse (xdif = 0) and (ydif = 0)
   [report true]
   [report false]
+end
+
+to-report is-gold-here [loc]
+  let whom -1
+  ask golds [
+    if ((distancexy (first loc) (item 1 loc)) = 0) and (not is-taken) [
+      set whom who
+    ]
+  ]
+  report whom
+end
+
+to reach-gold-to-base [gold-id]
+  ask gold gold-id [
+    set is-taken true
+  ]
+  go-to (item 1 read-first-belief-of-type "base-loc")
+  ask miners [
+    let m-x xcor
+    let m-y ycor
+    ask gold gold-id [
+      setxy m-x m-y
+    ]
+  ]
+
+end
+
+
+to update-beliefs
+  update-seen-golds
+  update-seen-holes
+end
+
+to update-seen-holes
+end
+
+to update-seen-golds
+  ask golds [
+    let g-xcor xcor
+    let g-ycor ycor
+    let taken is-taken
+    ask miners [
+      if ((distancexy g-xcor g-ycor) <= 5) and (not taken)[
+        let bel create-belief "gold-loc" (list g-xcor g-ycor)
+        if not exists-belief bel [add-belief bel]
+      ]
+    ]
+  ]
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
