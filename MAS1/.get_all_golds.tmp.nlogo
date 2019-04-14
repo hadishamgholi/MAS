@@ -6,13 +6,13 @@ breed [bases base]
 breed [holes hole]
 
 miners-own [beliefs intentions desire has-gold keep-going]
-golds-own [is-taken]
+golds-own [is-taken is-fallen]
 bases-own []
 holes-own []
 
-to test
+to-report test
   let num (3 / 2)
-  print num
+  report num
 end
 
 to setup
@@ -38,14 +38,13 @@ create-holes n_holes [
     set shape "circle 2"
     set color 9.9
     set size 0.75
-    setxy (round random-xcor) (round random-ycor)
+    setxy (random-pxcor) (random-pycor)
   ]
 end
 
 to setup-world
   let w_s (int (world_size / 2) - 1)
   resize-world (-1 * w_s) (w_s) (-1 * w_s) (w_s)
-  ;print word "w_s is " w_s
 end
 
 to setup-golds
@@ -53,7 +52,9 @@ to setup-golds
     set shape "square"
     set color yellow
     set size 0.5
-    setxy (round random-xcor) (round random-ycor)
+    setxy (random-pxcor) (random-pycor)
+    set is-taken false
+    set is-fallen false
   ]
 end
 
@@ -64,8 +65,9 @@ to setup-miner
     set size 1.5
     setxy 0 0
     set beliefs []
+    set desire n_golds
     add-belief create-belief "base-loc" [0 0]
-    ;add-belief create-belief "golds-loc" []
+    ;add-belief create-belief "gold-loc" []
 
     set intentions []
     set has-gold false
@@ -75,7 +77,7 @@ end
 to setup-base
   create-bases 1 [
     set shape "target"
-    set color 15
+    set color 115
     setxy 0 0
   ]
 end
@@ -84,33 +86,58 @@ to miner-behavior
   ask miners [
     if empty? intentions[
       let dest []
-      ifelse (exist-beliefs-of-type "golds-loc")
-        [set dest (read-first-belief-of-type "golds-loc")]
-        [set dest (list (round random-xcor) (round random-ycor))]
+      let gold-id (is-gold-here (list xcor ycor))
+      ifelse gold-id != -1
+        [
+          add-intention (word "reach-gold-to-base " gold-id) (word "is-reached-to " (item 1 read-first-belief-of-type "base-loc"))
+        ]
+        [
+          ifelse (exist-beliefs-of-type "gold-loc")
+            [set dest (item 1 (get-belief "gold-loc"))]
+            [set dest (list (random-pxcor) (random-pycor))
+             if exists-belief (create-belief "hole-loc" dest) [
+               set dest (list (random-pxcor) (random-pycor))
+             ]
+            ]
+            add-intention (word "go-to " dest) (word "is-reached-to " dest)
+        ]
 
-      add-intention (word "go-to " dest) (word "is-reached-to " dest)
 
     ]
     print get-intention
     execute-intentions
   ]
+
 end
 
 to go-to [dloc]
   ask miners [
     let xdif (xcor - (first dloc))
     let ydif (ycor - (item 1 dloc))
+    let new-x xcor
+    let new-y ycor
     let x-direction 0
     let y-direction 0
+
     if not (xdif = 0) [set x-direction (xdif / abs(xdif))]
     if not (ydif = 0) [set y-direction (ydif / abs(ydif))]
-    if not is-reached-to dloc [
-      ifelse ydif = 0
-        [setxy (xcor - x-direction) (ycor)]
-        [setxy (xcor) (ycor - y-direction)]
-    ]
-  ]
+    let random-direction random 2
+    ifelse ydif != 0
+      [set new-y (ycor - y-direction)]
+      [set new-x (xcor - x-direction)]
 
+    if (any? holes-on patch new-x new-y) and (exists-belief (create-belief "hole-loc" (list new-x new-y)))
+      [
+        ask neighbors4[
+          if not (any? holes-here) [
+            set new-x pxcor
+            set new-y pycor
+          ]
+        ]
+      ]
+
+    setxy new-x new-y
+  ]
 end
 
 to-report is-reached-to [dloc]
@@ -120,24 +147,77 @@ to-report is-reached-to [dloc]
     set xdif (xcor - (first dloc))
     set ydif (ycor - (item 1 dloc))
   ]
-  print (word "xdif " xdif " ydif " ydif)
+  ;print (word "xdif " xdif " ydif " ydif)
   ifelse (xdif = 0) and (ydif = 0)
   [report true]
   [report false]
 end
+
+to-report is-gold-here [loc]
+  let whom -1
+  ask golds [
+    if ((distancexy (first loc) (item 1 loc)) = 0) and (not is-taken) [
+      set whom who
+    ]
+  ]
+  report whom
+end
+
+to reach-gold-to-base [gold-id]
+  ask gold gold-id [
+    set is-taken true
+  ]
+  go-to (item 1 read-first-belief-of-type "base-loc")
+
+  ask miners [
+    let m-x xcor
+    let m-y ycor
+    ask gold gold-id [
+      ifelse not is-fallen
+        [setxy m-x m-y]
+        [set color 15]
+    ]
+  ]
+
+
+end
+
 
 to update-beliefs
   update-seen-golds
   update-seen-holes
 end
 
+to update-seen-holes
+  ask miners [
+    if count holes-here != 0 [
+      let h-xcor 0
+      let h-ycor 0
+      ask holes-here [
+        set h-xcor xcor
+        set h-ycor ycor
+        set color green
+      ]
+      let bel create-belief "hole-loc" (list h-xcor h-ycor)
+      if not exists-belief bel [add-belief bel]
+      ask golds-here [
+          set is-fallen true
+      ]
+
+
+    ]
+  ]
+end
+
 to update-seen-golds
   ask golds [
     let g-xcor xcor
     let g-ycor ycor
+    let taken is-taken
     ask miners [
-      if (distancexy g-xcor g-ycor) <= 5 [
-        add-belief create-belief "gold-loc" (list g-xcor g-ycor)
+      if ((distancexy g-xcor g-ycor) <= 5) and (not taken)[
+        let bel create-belief "gold-loc" (list g-xcor g-ycor)
+        if not exists-belief bel [add-belief bel]
       ]
     ]
   ]
@@ -146,11 +226,11 @@ end
 GRAPHICS-WINDOW
 210
 10
-621
-422
+838
+639
 -1
 -1
-13.0
+20.0
 1
 10
 1
@@ -197,10 +277,10 @@ NIL
 HORIZONTAL
 
 BUTTON
-7
-257
-71
-290
+4
+357
+68
+390
 Setup
 setup
 NIL
@@ -244,10 +324,10 @@ NIL
 HORIZONTAL
 
 BUTTON
-8
-296
-71
-329
+5
+396
+68
+429
 go
 go
 T
@@ -259,6 +339,39 @@ NIL
 NIL
 NIL
 1
+
+MONITOR
+7
+168
+78
+213
+Loss Golds
+count golds with [is-fallen = true]
+17
+1
+11
+
+MONITOR
+7
+219
+104
+264
+Collected Golds
+count golds with [xcor = 0 and ycor = 0]
+17
+1
+11
+
+MONITOR
+8
+270
+206
+315
+Current Intention
+last [intentions] of miner 10
+17
+1
+11
 
 @#$#@#$#@
 ## WHAT IS IT?
