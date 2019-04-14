@@ -28,8 +28,11 @@ to setup
 end
 
 to go
-  miner-behavior
-  update-beliefs
+  if not is-finished
+  [
+    miner-behavior
+    update-beliefs
+  ]
   tick
 end
 
@@ -163,6 +166,18 @@ to-report is-gold-here [loc]
   report whom
 end
 
+
+to-report is-finished
+  let m-desire 0
+  ask miners [
+    set m-desire desire
+  ]
+  let golds-collected ((count golds with [is-fallen = true]) + (count golds with [xcor = 0 and ycor = 0]))
+  ifelse golds-collected = m-desire
+    [report true]
+    [report false]
+end
+
 to reach-gold-to-base [gold-id]
   ask gold gold-id [
     set is-taken true
@@ -181,7 +196,6 @@ to reach-gold-to-base [gold-id]
 
 
 end
-
 
 to update-beliefs
   update-seen-golds
@@ -222,6 +236,7 @@ to update-seen-golds
     ]
   ]
 end
+
 @#$#@#$#@
 GRAPHICS-WINDOW
 210
@@ -277,10 +292,10 @@ NIL
 HORIZONTAL
 
 BUTTON
-4
-357
-68
-390
+8
+379
+72
+412
 Setup
 setup
 NIL
@@ -324,10 +339,10 @@ NIL
 HORIZONTAL
 
 BUTTON
-5
-396
-68
-429
+9
+418
+72
+451
 go
 go
 T
@@ -369,6 +384,17 @@ MONITOR
 315
 Current Intention
 last [intentions] of miner 10
+17
+1
+11
+
+MONITOR
+9
+320
+81
+365
+Is Finished
+is-finished
 17
 1
 11
